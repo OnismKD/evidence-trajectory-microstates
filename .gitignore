@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+.DS_Store
+
+# Raw EEG and generated derivatives are intentionally not versioned.
+data/*
+!data/README.md
+!data/manifest.example.csv
+outputs/
+derivatives/
+*.set
+*.fdt
+*.edf
+*.bdf
+*.vhdr
+*.vmrk
+*.eeg
+*.fif
+*.npz

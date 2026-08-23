@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the accompanying paper and this repository."
+title: "Evidence-Trajectory Microstates"
+type: software
+authors:
+  - family-names: Wu
+    given-names: Kaidong
+    email: kaidongwu@outlook.com
+repository-code: "https://github.com/OnismKD/evidence-trajectory-microstates"
+license: BSD-3-Clause
+version: 0.1.0
+date-released: 2026-08-23

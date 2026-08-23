@@ -1,0 +1,24 @@
+dataset: caueeg
+manifest_path: ../data/caueeg_manifest.csv
+output_dir: ../outputs/caueeg
+preprocessing:
+  target_sfreq: 200.0
+  broadband: [1.0, 40.0]
+  alpha_band: [8.0, 13.0]
+  filter_order: 5
+  detrend: true
+  common_average_reference: true
+peaks: {min_distance_ms: 10.0, minimum_count: 20}
+readout:
+  gamma: 1.0
+  duration_percentile: 0.50
+  lzc_percentile: 0.80
+  min_duration_ms: 30.0
+  null_mode: evidence_quantile_self
+analysis:
+  fixed_algorithms: [kmeans, aahc, hmm]
+  fixed_k: [4, 7]
+  adaptive_algorithms: [leiden, infomap]
+  subject_native: true
+  knn_fraction: 0.01
+  random_state: 42

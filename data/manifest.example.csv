@@ -1,0 +1,3 @@
+subject_id,dataset,eeg_path,group,age,sex,include
+sub-001,my_dataset,/path/to/sub-001_eeg.set,case,68,F,true
+sub-002,my_dataset,/path/to/sub-002_eeg.set,control,66,M,true
