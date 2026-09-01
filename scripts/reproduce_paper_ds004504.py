@@ -19,7 +19,6 @@ from evidence_microstates.paper_protocol import (
     select_paper_features,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

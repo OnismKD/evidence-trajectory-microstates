@@ -56,7 +56,7 @@ def _gamma_tag(value: float) -> str:
 
 
 def _percentile_tag(value: float) -> str:
-    return str(int(round(float(value) * 100.0)))
+    return str(round(float(value) * 100.0))
 
 
 def _paper_weighted_quantiles(
@@ -301,7 +301,7 @@ def select_paper_features(features: pd.DataFrame) -> pd.DataFrame:
                     "algorithm": algorithm,
                     "level": level,
                     "K_fixed": int(k_fixed),
-                    "K_found": int(round(pd.to_numeric(model_frame["K_found"]).median())),
+                    "K_found": round(pd.to_numeric(model_frame["K_found"]).median()),
                     "metric_family": family,
                     "hard_feature": hard_name,
                     "traj_feature": trajectory["feature"],
