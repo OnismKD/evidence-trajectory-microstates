@@ -12,7 +12,7 @@ import pandas as pd
 from .cache import load_peak_sequence, save_peak_sequence
 from .datasets import build_manifest, load_yaml, read_eeg, resolve_path
 from .peaks import PeakSequence, extract_gfp_peak_sequence
-from .preprocessing import preprocess_eeg
+from .preprocessing import preprocess_eeg, preprocess_paper_ds004504_raw
 from .workflow import (
     ReadoutSettings,
     analyze_subject_adaptive,
@@ -48,23 +48,46 @@ def extract_command(config_path: str) -> None:
             reference_channels = channel_names
         elif channel_names != reference_channels:
             raise ValueError(
-                f"Channel mismatch for {record['subject_id']}; harmonize channels within a dataset before group modeling"
+                f"Channel mismatch for {record['subject_id']}; "
+                "harmonize channels within a dataset before group modeling"
             )
-        data, sfreq = preprocess_eeg(
-            raw.get_data(),
-            float(raw.info["sfreq"]),
-            target_sfreq=pre.get("target_sfreq", 200.0),
-            broadband=tuple(pre["broadband"]) if pre.get("broadband") else None,
-            alpha_band=tuple(pre.get("alpha_band", [8.0, 13.0])),
-            filter_order=int(pre.get("filter_order", 5)),
-            detrend=bool(pre.get("detrend", True)),
-            common_average_reference=bool(pre.get("common_average_reference", True)),
-        )
+        if pre.get("profile") == "paper_ds004504":
+            data, sfreq = preprocess_paper_ds004504_raw(
+                raw,
+                target_sfreq=float(pre.get("target_sfreq", 200.0)),
+                alpha_band=tuple(pre.get("alpha_band", [8.0, 13.0])),
+                filter_order=int(pre.get("filter_order", 5)),
+                detrend=bool(pre.get("detrend", True)),
+                common_average_reference=bool(pre.get("common_average_reference", True)),
+            )
+        else:
+            data, sfreq = preprocess_eeg(
+                raw.get_data(),
+                float(raw.info["sfreq"]),
+                target_sfreq=pre.get("target_sfreq", 200.0),
+                broadband=tuple(pre["broadband"]) if pre.get("broadband") else None,
+                alpha_band=tuple(pre.get("alpha_band", [8.0, 13.0])),
+                filter_order=int(pre.get("filter_order", 5)),
+                detrend=bool(pre.get("detrend", True)),
+                common_average_reference=bool(pre.get("common_average_reference", True)),
+            )
         sequence = extract_gfp_peak_sequence(
             data,
             sfreq,
             min_peak_distance_ms=float(peak_config.get("min_distance_ms", 10.0)),
+            gfp_dtype=np.float32 if pre.get("profile") == "paper_ds004504" else np.float64,
         )
+        if pre.get("profile") == "paper_ds004504":
+            # The frozen analysis cache stored midpoint weights as float32.
+            # Preserve that rounding before reloading them as float64 downstream.
+            sequence = PeakSequence(
+                maps=sequence.maps,
+                indices=sequence.indices,
+                weights_sec=sequence.weights_sec.astype(np.float32),
+                block_ids=sequence.block_ids,
+                sfreq=sequence.sfreq,
+                n_samples=sequence.n_samples,
+            )
         if sequence.maps.shape[0] < int(peak_config.get("minimum_count", 20)):
             raise RuntimeError(f"Too few GFP peaks for {record['subject_id']}: {sequence.maps.shape[0]}")
         save_peak_sequence(peaks_dir / f"{record['subject_id']}_peaks.npz", sequence, channel_names)

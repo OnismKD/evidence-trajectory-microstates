@@ -25,9 +25,17 @@ def resolve_path(value: str | Path, config: dict[str, Any]) -> Path:
     return path.resolve()
 
 
-def ds004504_manifest(root: str | Path) -> pd.DataFrame:
+def ds004504_manifest(root: str | Path, eeg_variant: str = "derivatives") -> pd.DataFrame:
     """Build the AD/HC manifest from the public BIDS participants table."""
     root = Path(root).resolve()
+    if eeg_variant not in {"derivatives", "raw"}:
+        raise ValueError("ds004504 eeg_variant must be 'derivatives' or 'raw'")
+    eeg_root = root / "derivatives" if eeg_variant == "derivatives" else root
+    if not eeg_root.exists():
+        raise FileNotFoundError(
+            f"Requested ds004504 {eeg_variant} input is missing: {eeg_root}. "
+            "Re-run scripts/download_ds004504.py with the matching --input option."
+        )
     participants = pd.read_csv(root / "participants.tsv", sep="\t")
     participants = participants[participants["Group"].isin(["A", "C"])].copy()
     participants["group"] = participants["Group"].map({"A": "AD", "C": "HC"})
@@ -36,21 +44,27 @@ def ds004504_manifest(root: str | Path) -> pd.DataFrame:
     participants["sex"] = participants["Gender"].astype(str)
     paths = []
     for subject_id in participants["subject_id"]:
-        matches = sorted((root / subject_id / "eeg").glob(f"{subject_id}_task-eyesclosed_eeg.*"))
+        matches = sorted((eeg_root / subject_id / "eeg").glob(f"{subject_id}_task-eyesclosed_eeg.*"))
         matches = [
             path for path in matches if path.suffix.lower() in {".set", ".edf", ".bdf", ".vhdr", ".fif"}
         ]
         paths.append(str(matches[0]) if matches else "")
     participants["eeg_path"] = paths
     participants["dataset"] = "ds004504"
+    participants["input_stage"] = eeg_variant
     participants["include"] = participants["eeg_path"].str.len() > 0
-    return participants[["subject_id", "dataset", "eeg_path", "group", "age", "sex", "include"]]
+    return participants[
+        ["subject_id", "dataset", "eeg_path", "group", "age", "sex", "input_stage", "include"]
+    ]
 
 
 def build_manifest(config: dict[str, Any]) -> pd.DataFrame:
     dataset = config["dataset"]
     if dataset == "ds004504" and config.get("adapter") == "openneuro_ds004504":
-        manifest = ds004504_manifest(resolve_path(config["dataset_root"], config))
+        manifest = ds004504_manifest(
+            resolve_path(config["dataset_root"], config),
+            eeg_variant=str(config.get("eeg_variant", "derivatives")),
+        )
     else:
         manifest_path = config.get("manifest_path")
         if not manifest_path:

@@ -1,0 +1,17 @@
+algorithm,K_fixed,metric_family,traj_feature
+aahc,4,global_duration,traj_g9_p60_global_mean_duration_ms
+aahc,4,lzc,traj_g1_p75_hardany_null_lzc_norm
+aahc,7,global_duration,traj_g1_p40_global_mean_duration_ms
+aahc,7,lzc,traj_g8_p75_hardany_null_lzc_norm
+hmm,4,global_duration,traj_g10_p45_global_mean_duration_ms
+hmm,4,lzc,traj_g1_p75_hardany_null_lzc_norm
+hmm,7,global_duration,traj_g10_p50_global_mean_duration_ms
+hmm,7,lzc,traj_g1_p20_hardself_null_lzc_norm
+infomap,-1,global_duration,traj_g1_p30_global_mean_duration_ms
+infomap,-1,lzc,traj_g2_p50_hardself_null_lzc_norm
+kmeans,4,global_duration,traj_g1_p55_global_mean_duration_ms
+kmeans,4,lzc,traj_g5_p65_hardany_null_lzc_norm
+kmeans,7,global_duration,traj_g9_p45_global_mean_duration_ms
+kmeans,7,lzc,traj_g10_p70_hardself_null_lzc_norm
+leiden,-1,global_duration,traj_g1_p60_global_mean_duration_ms
+leiden,-1,lzc,traj_g2_p40_hardself_null_lzc_norm

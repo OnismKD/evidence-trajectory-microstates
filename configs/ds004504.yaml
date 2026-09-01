@@ -1,11 +1,13 @@
 dataset: ds004504
 adapter: openneuro_ds004504
 dataset_root: ../data/ds004504
+eeg_variant: derivatives
 output_dir: ../outputs/ds004504
 
 preprocessing:
-  # ds004504 distributes preprocessed derivatives; apply only the final alpha
-  # state-modeling filter here. Set broadband to [1.0, 40.0] for raw inputs.
+  # Frozen profile used for the paper: MNE resampling, direct-form zero-phase
+  # fifth-order Butterworth alpha filtering, linear detrending, then CAR.
+  profile: paper_ds004504
   target_sfreq: 200.0
   broadband: null
   alpha_band: [8.0, 13.0]

@@ -91,3 +91,24 @@ Predictive models use subject-native global descriptors. Outer repeated
 cross-validation estimates held-out performance; imputation, scaling, and
 regularization tuning are restricted to each outer training split. Young-old
 classification includes subjects younger than 35 years or older than 60 years.
+
+## Frozen ds004504 PDF protocol
+
+The command `scripts/reproduce_paper_ds004504.py` is a compatibility analysis
+for the ds004504 classification rows in the supplied manuscript PDF. It uses
+the public denoised derivative recordings and fits all eight state models
+independently within each subject. For every model, the complete cohort is used
+to select one trajectory global-duration feature and one null-LZC feature by
+maximum absolute AD-HC Cohen's d over `g=1,...,10` and percentiles 20--80 in
+steps of five. The matched Hard design contains the ordinary duration and LZC
+feature from each model (16 predictors), the Trajectory design contains the 16
+selected evidence-aware predictors, and Combined concatenates both designs.
+
+Median imputation and standardization are fitted separately in each training
+fold. A fixed L2 logistic regression (`C=1`, `liblinear`, balanced class
+weights) is evaluated with five-fold stratified cross-validation repeated 20
+times, yielding 100 held-out fold scores. The `g,p` screening is deliberately
+cohort-wide because that is the procedure used to generate the historical PDF;
+it is not nested within the outer folds. New confirmatory predictive analyses
+should use `scripts/run_predictive_validation.py`, where preprocessing and
+model tuning are restricted to the corresponding training folds.

@@ -23,12 +23,24 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("data/ds004504"))
     parser.add_argument("--subjects", default="1-65", help="comma-separated IDs or ranges")
     parser.add_argument("--tag", default="1.0.9")
+    parser.add_argument(
+        "--input",
+        choices=["derivatives", "raw", "both"],
+        default="derivatives",
+        help="download the preprocessed derivatives used by the paper, raw EEG, or both",
+    )
     args = parser.parse_args()
     try:
         import openneuro
     except ImportError as exc:
         raise SystemExit("Install the downloader with: pip install -e '.[download]'") from exc
-    include = [f"sub-{subject:03d}/eeg/*task-eyesclosed*" for subject in parse_subjects(args.subjects)]
+    include = ["participants.tsv", "participants.json", "dataset_description.json"]
+    for subject in parse_subjects(args.subjects):
+        subject_id = f"sub-{subject:03d}"
+        if args.input in {"raw", "both"}:
+            include.append(f"{subject_id}/eeg/*task-eyesclosed*")
+        if args.input in {"derivatives", "both"}:
+            include.append(f"derivatives/{subject_id}/eeg/*task-eyesclosed*")
     openneuro.download(
         dataset="ds004504",
         tag=args.tag,

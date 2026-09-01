@@ -15,6 +15,47 @@ def _bandpass(data: np.ndarray, sfreq: float, low: float, high: float, order: in
     return signal.sosfiltfilt(sos, data, axis=-1)
 
 
+def _bandpass_ba(data: np.ndarray, sfreq: float, low: float, high: float, order: int) -> np.ndarray:
+    """Direct-form Butterworth filter retained for exact paper reproduction."""
+    nyquist = 0.5 * float(sfreq)
+    b, a = signal.butter(
+        int(order),
+        [float(low) / nyquist, float(high) / nyquist],
+        btype="band",
+    )
+    return signal.filtfilt(b, a, data, axis=-1)
+
+
+def preprocess_paper_ds004504_raw(
+    raw: object,
+    *,
+    target_sfreq: float = 200.0,
+    alpha_band: tuple[float, float] = (8.0, 13.0),
+    filter_order: int = 5,
+    detrend: bool = True,
+    common_average_reference: bool = True,
+) -> tuple[np.ndarray, float]:
+    """Reproduce the ds004504 preprocessing order used for the paper.
+
+    Resampling is performed by MNE on the continuous ``Raw`` object with
+    automatic padding. The alpha filter then uses SciPy's direct-form
+    Butterworth coefficients and zero-phase ``filtfilt``. Keeping this profile
+    explicit prevents a numerically similar modern filter implementation from
+    silently changing GFP peak locations and downstream paper results.
+    """
+    work = raw.copy()
+    if not np.isclose(float(work.info["sfreq"]), float(target_sfreq)):
+        work.resample(float(target_sfreq), npad="auto", verbose="ERROR")
+    x = work.get_data().astype(np.float64)
+    fs = float(work.info["sfreq"])
+    x = _bandpass_ba(x, fs, float(alpha_band[0]), float(alpha_band[1]), int(filter_order))
+    if detrend:
+        x = signal.detrend(x, axis=-1, type="linear")
+    if common_average_reference:
+        x = x - x.mean(axis=0, keepdims=True)
+    return x.astype(np.float32), fs
+
+
 def preprocess_eeg(
     data: np.ndarray,
     sfreq: float,

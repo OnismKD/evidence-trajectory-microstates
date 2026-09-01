@@ -29,9 +29,13 @@ class PeakSequence:
             raise ValueError("Every peak must represent a positive interval")
 
 
-def global_field_power(data: np.ndarray) -> np.ndarray:
+def global_field_power(
+    data: np.ndarray,
+    *,
+    dtype: np.dtype | type[np.floating] = np.float64,
+) -> np.ndarray:
     """Across-channel standard deviation at each sample."""
-    x = np.asarray(data, dtype=np.float64)
+    x = np.asarray(data, dtype=dtype)
     if x.ndim != 2:
         raise ValueError("data must have shape (channels, samples)")
     return np.std(x, axis=0)
@@ -60,6 +64,7 @@ def extract_gfp_peak_sequence(
     *,
     min_peak_distance_ms: float = 10.0,
     blocks: list[tuple[int, int]] | None = None,
+    gfp_dtype: np.dtype | type[np.floating] = np.float64,
 ) -> PeakSequence:
     """Extract all valid GFP peaks, preserving discontinuity boundaries.
 
@@ -82,7 +87,7 @@ def extract_gfp_peak_sequence(
         start, stop = int(start), int(stop)
         if not 0 <= start < stop <= n_samples:
             raise ValueError(f"Invalid block {(start, stop)} for {n_samples} samples")
-        gfp = global_field_power(x[:, start:stop])
+        gfp = global_field_power(x[:, start:stop], dtype=gfp_dtype)
         local, _ = find_peaks(gfp, distance=distance)
         local = local[np.isfinite(x[:, start + local]).all(axis=0)]
         if local.size == 0:

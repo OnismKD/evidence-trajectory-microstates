@@ -12,8 +12,8 @@ from evidence_microstates.complexity import (
 )
 from evidence_microstates.descriptors import hard_label_descriptors, trajectory_descriptors
 from evidence_microstates.evidence import sharpen_evidence, spatial_evidence, weighted_percentile_ranks
-from evidence_microstates.peaks import midpoint_weights
-from evidence_microstates.preprocessing import preprocess_eeg
+from evidence_microstates.peaks import global_field_power, midpoint_weights
+from evidence_microstates.preprocessing import preprocess_eeg, preprocess_paper_ds004504_raw
 from evidence_microstates.temporal import contiguous_segments, merge_short_segments
 
 
@@ -26,10 +26,33 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(sfreq, 100.0)
         np.testing.assert_allclose(filtered.mean(axis=0), 0.0, atol=1e-6)
 
+    def test_paper_preprocessing_profile_is_explicit_and_car_referenced(self) -> None:
+        import mne
+
+        rng = np.random.default_rng(13)
+        raw = mne.io.RawArray(
+            rng.normal(size=(4, 1000)),
+            mne.create_info(["A", "B", "C", "D"], 200.0, "eeg"),
+            verbose="ERROR",
+        )
+        filtered, sfreq = preprocess_paper_ds004504_raw(raw)
+        self.assertEqual(sfreq, 200.0)
+        self.assertEqual(filtered.shape, (4, 1000))
+        np.testing.assert_allclose(filtered.mean(axis=0), 0.0, atol=1e-6)
+
     def test_midpoint_weights_cover_the_recording(self) -> None:
         weights = midpoint_weights(np.asarray([10, 30, 70]), n_samples=100, sfreq=100.0)
         np.testing.assert_allclose(weights, [0.2, 0.3, 0.5])
         self.assertAlmostEqual(float(weights.sum()), 1.0)
+
+    def test_gfp_precision_can_match_the_frozen_paper_cache(self) -> None:
+        data = np.asarray(
+            [[1.0, 1.0 + 1e-7, -1.0], [-1.0, -1.0, 1.0]],
+            dtype=np.float32,
+        )
+        gfp = global_field_power(data, dtype=np.float32)
+        self.assertEqual(gfp.dtype, np.float32)
+        np.testing.assert_array_equal(gfp, np.std(data, axis=0))
 
     def test_spatial_evidence_is_polarity_invariant(self) -> None:
         maps = np.asarray([[1.0, 0.0, -1.0], [-1.0, 0.0, 1.0]])

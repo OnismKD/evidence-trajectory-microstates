@@ -1,0 +1,21 @@
+name: evidence-trajectory-paper
+channels:
+  - conda-forge
+dependencies:
+  # Linux x86-64 builds used for the published ds004504 analysis.
+  - python=3.12.13=hd63d673_0_cpython
+  - libopenblas=0.3.33=pthreads_h94d23a6_0
+  - numpy=2.4.6=py312h33ff503_0
+  - scipy=1.17.1=py312h54fa4ab_1
+  - scikit-learn=1.8.0=np2py312h3226591_1
+  - mne=1.12.1=linux_pyside6_h60f6096_200
+  - pyyaml=6.0.3=py312h8a5da7c_1
+  - pip=26.1.1=pyh8b19718_0
+  - pip:
+      - pandas==2.3.3
+      - hmmlearn==0.3.3
+      - pycrostates==0.6.1
+      - igraph==1.0.0
+      - leidenalg==0.12.0
+      - infomap==2.11.0
+      - openneuro-py==2026.4.1

@@ -1,35 +1,10 @@
 # Evidence-Trajectory Microstates
 
-Research code for comparing conventional hard-label EEG topographic-state
-descriptors with matched evidence-aware readouts. The same fitted state model
-produces both representations:
-
-- **Hard label:** the state with maximum template similarity at each GFP peak.
-- **Evidence trajectory:** the full vector of template similarities, optionally
-  sharpened and summarized as high-evidence temporal episodes.
-- **Confidence-aware LZC:** a symbolic sequence with a null state when the
-  selected state does not satisfy a predefined evidence or percentile rule.
-
-The implementation supports the paper's two complementary state-model
-families: classic fixed-`K` microstates (KMeans, AAHC, and HMM at `K=4` and
-`K=7`) and subject-adaptive graph communities (Leiden and Infomap).
-
-## Repository layout
-
-```text
-configs/                  Dataset and analysis settings
-data/                     Local data only; raw EEG is git-ignored
-docs/                     Method and dataset contracts
-examples/                 Minimal runnable examples
-scripts/                  Download and predictive-validation entry points
-src/evidence_microstates/ Reusable implementation
-tests/                    Numerical and workflow tests
-```
-
-The exploratory scripts and machine-specific output caches used during method
-development are intentionally excluded. This repository contains the compact
-analysis path needed to reproduce the method rather than a snapshot of a local
-filesystem.
+This repository contains the code accompanying our paper on evidence-aware
+temporal descriptors for EEG topographic state models. It implements matched
+Hard-label, Evidence-trajectory, and confidence-aware Lempel-Ziv complexity
+(LZC) readouts for fixed-`K` models (KMeans, AAHC, and HMM) and adaptive
+community models (Leiden and Infomap).
 
 ## Installation
 
@@ -38,144 +13,102 @@ Python 3.10 or newer is required.
 ```bash
 git clone https://github.com/OnismKD/evidence-trajectory-microstates.git
 cd evidence-trajectory-microstates
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e '.[full,download,plot]'
 ```
 
-The base installation includes the KMeans workflow. The `full` extra adds
-AAHC, HMM, Leiden, and Infomap.
+For exact Linux x86-64 compatibility with the numerical environment used for
+the paper results, create the locked conda environment instead:
 
-## One-minute smoke test
+```bash
+conda env create -f environment-paper.yml
+conda activate evidence-trajectory-paper
+python -m pip install -e . --no-deps
+```
 
-This does not require EEG data:
+`requirements-paper.txt` records the Python package versions for other
+platforms, but their BLAS implementations may produce small differences in a
+few near-degenerate clustering solutions.
+
+## Quick test
+
+Run the data-free demonstration:
 
 ```bash
 evidence-microstates demo --output-dir outputs/demo
 ```
 
-It generates polarity-varying synthetic peak topographies, fits a two-level
-KMeans `K=4` model, backfits the group templates, and writes matched hard-label,
-trajectory, and null-LZC descriptors.
+## Reproduce the ds004504 result
 
-## Public ds004504 example
-
-The repository uses OpenNeuro
-[`ds004504`](https://openneuro.org/datasets/ds004504) as the public example.
-The downloader selects the 36 AD participants and 29 healthy controls and
-retrieves their eyes-closed EEG plus BIDS metadata.
+We recommend validating the installation with
+[OpenNeuro ds004504, snapshot 1.0.9](https://openneuro.org/datasets/ds004504/versions/1.0.9),
+because it can be downloaded directly without an access application.
 
 ```bash
-python scripts/download_ds004504.py --output data/ds004504
+python scripts/download_ds004504.py \
+  --output data/ds004504 \
+  --input derivatives
+
 evidence-microstates extract --config configs/ds004504.yaml
-evidence-microstates analyze --config configs/ds004504.yaml
+
+python scripts/reproduce_paper_ds004504.py \
+  --config configs/ds004504.yaml \
+  --n-jobs 8
 ```
 
-For a quick test, download a few subjects and temporarily restrict
-`fixed_algorithms` to `[kmeans]`:
+The full state-model fit is computationally intensive and resumes from completed
+per-subject feature files if interrupted.
+
+The verifier checks the selected parameters and the classification results
+reported in the paper:
+
+| Feature family | Balanced accuracy | ROC-AUC |
+|---|---:|---:|
+| Hard | 0.806 +/- 0.096 | 0.862 +/- 0.089 |
+| Trajectory | 0.828 +/- 0.081 | 0.854 +/- 0.092 |
+| Combined | 0.839 +/- 0.091 | 0.888 +/- 0.083 |
+
+Results are written to `outputs/ds004504/paper_reproduction/`.
+
+## Other paper datasets
+
+The remaining datasets must be downloaded from their official sources:
+
+| Dataset | Source |
+|---|---|
+| CAUEEG | [Official repository and access instructions](https://github.com/ipis-mjkim/caueeg-dataset) |
+| ds005385 | [OpenNeuro ds005385](https://openneuro.org/datasets/ds005385) |
+| TD-BRAIN V3.1 | [Official download and data-use agreement](https://brainclinics.com/resources/tdbrain-dataset/introduction) |
+
+Place downloaded data under `data/`, or provide absolute EEG paths in a CSV
+manifest. Copy the relevant example configuration and update its
+`manifest_path` if necessary:
 
 ```bash
-python scripts/download_ds004504.py --output data/ds004504 --subjects 1-4,37-40
+cp configs/caueeg.example.yaml configs/caueeg.yaml
+cp configs/ds005385.example.yaml configs/ds005385.yaml
+cp configs/tdbrain.example.yaml configs/tdbrain.yaml
 ```
 
-Main outputs are:
+Each manifest requires `subject_id`, `dataset`, and `eeg_path`; optional fields
+include `group`, `age`, `sex`, and `include`. See
+[`docs/datasets.md`](docs/datasets.md) for dataset-specific file selection and
+[`docs/methods.md`](docs/methods.md) for the analysis definitions.
 
-```text
-outputs/ds004504/manifest_snapshot.csv
-outputs/ds004504/peaks/*_peaks.npz
-outputs/ds004504/models/*_templates.npy
-outputs/ds004504/features_group_two_level.csv
-outputs/ds004504/features_subject_level.csv
-```
-
-## Analysis contract
-
-### Preprocessing and samples
-
-Within each dataset, continuous EEG is resampled as configured, optionally
-receives a broad-band filter, is filtered to 8-13 Hz, linearly detrended, and
-common-average referenced. GFP is the across-channel standard deviation. All
-local GFP maxima separated by at least 10 ms are retained. A peak's temporal
-weight is the interval between adjacent peak midpoints, so duration summaries
-remain in seconds even though the state sequence is indexed by peaks.
-
-### State models
-
-For fixed-`K` analyses, each subject is first fitted independently. The
-resulting subject templates are pooled and clustered at a second level to form
-group templates, which are then backfitted to all peak maps. HMM state maps are
-aligned at the second level with polarity-invariant KMeans because unordered
-topographies do not define a second-level temporal HMM.
-
-Leiden and Infomap instead operate on a subject-specific polarity-invariant
-k-nearest-neighbor graph. Their community templates are affinity-weighted
-means and their number of states is not fixed.
-
-### Matched readouts
-
-For peak topography `x_t` and template `m_k`, evidence is
-
-```text
-s[t, k] = abs(corr_space(x_t, m_k))
-p[t, k] = s[t, k]^gamma / sum_j s[t, j]^gamma
-```
-
-The hard label is `argmax_k s[t, k]`. For each state, a high-evidence episode
-is a contiguous run where `p[t, k]` exceeds that state's weighted percentile
-threshold. Mean duration and occurrence are computed from these runs after the
-same minimum-duration rule used for hard labels. See
-[`docs/methods.md`](docs/methods.md) for the exact definitions and null-LZC
-variants.
-
-## Statistical and predictive validation
-
-Group-level effect analyses use the two-level group templates. Predictive
-validation uses **subject-native global features** by default. Reusing a group
-template fitted to the complete cohort inside cross-validation would expose
-held-out subjects to template learning. An alternative is to refit the entire
-two-level model within every outer training fold, which is substantially more
-expensive and must also map test subjects without updating the templates.
-
-Run paired nested CV on the subject-level output:
+## General workflow
 
 ```bash
-python scripts/run_predictive_validation.py \
-  --features outputs/ds004504/features_subject_level.csv \
-  --task ad_hc \
-  --repeats 10 \
-  --output-dir outputs/ds004504/prediction
+evidence-microstates extract --config configs/<dataset>.yaml
+evidence-microstates analyze --config configs/<dataset>.yaml
 ```
 
-For aging datasets, `--task young_old` defines young adults as `<35` years and
-older adults as `>60` years. `--task age_regression` retains the continuous age
-outcome. Scaling, median imputation, and regularization tuning occur inside the
-inner CV loop. The same outer splits are used for Hard, Trajectory, and Combined
-feature families.
+Predictive validation can be run with:
 
-Paired fold scores are useful sensitivity summaries, but repeated-CV folds are
-not statistically independent. Confirmatory inference should therefore also
-report subject-level permutation tests or a corrected resampled test.
-
-## Other datasets
-
-CAUEEG, ds005385, and TD-BRAIN are represented by placeholder YAML files. They
-expect a local manifest with at least `subject_id`, `eeg_path`, and optionally
-`group`, `age`, `sex`, and `include`. No controlled or locally licensed data are
-redistributed. See [`docs/datasets.md`](docs/datasets.md).
-
-## Reproducibility notes
-
-- Raw EEG and generated outputs are excluded by `.gitignore`.
-- Random seeds are explicit in every YAML file.
-- Hard and evidence-aware descriptors are always derived from the same state
-  model.
-- Fixed-`K` state-specific features are valid after template alignment;
-  subject-adaptive states should be summarized with label-invariant global
-  descriptors unless an explicit alignment procedure is added.
-- Parameter grids should be declared before outcome analysis. Dataset-specific
-  optimization without nested selection changes the estimand and can inflate
-  apparent performance.
+```bash
+python scripts/run_predictive_validation.py --help
+```
 
 ## Tests
 
@@ -186,6 +119,5 @@ python -m unittest discover -s tests -v
 ## Citation and license
 
 Citation metadata are provided in [`CITATION.cff`](CITATION.cff). The code is
-released under the BSD 3-Clause License. The ds004504 data are distributed
-separately by OpenNeuro under CC0; cite the dataset authors and descriptor when
-using those recordings.
+released under the BSD 3-Clause License. Dataset files are distributed
+separately by their original providers and are not included in this repository.

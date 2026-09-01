@@ -12,7 +12,6 @@ venv/
 
 # Raw EEG and generated derivatives are intentionally not versioned.
 data/*
-!data/README.md
 !data/manifest.example.csv
 outputs/
 derivatives/

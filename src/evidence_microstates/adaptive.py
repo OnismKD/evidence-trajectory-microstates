@@ -12,6 +12,8 @@ from .clustering import FittedStateModel
 from .evidence import normalize_topographies, spatial_evidence
 
 AdaptiveAlgorithm = Literal["leiden", "infomap"]
+GraphWeightMode = Literal["gaussian_distance", "abs_cosine"]
+AdaptiveEvidenceMode = Literal["template_similarity", "community_affinity"]
 
 
 def build_polarity_invariant_knn_graph(
@@ -19,7 +21,8 @@ def build_polarity_invariant_knn_graph(
     *,
     knn_fraction: float = 0.01,
     knn_min: int | None = None,
-) -> tuple[sparse.csr_matrix, dict[str, float]]:
+    weight_mode: GraphWeightMode = "gaussian_distance",
+) -> tuple[sparse.csr_matrix, dict[str, object]]:
     x = normalize_topographies(maps).astype(np.float32)
     n = x.shape[0]
     if n < 2:
@@ -37,22 +40,60 @@ def build_polarity_invariant_knn_graph(
     for row in range(n):
         neighbors = np.unique(np.r_[np.atleast_1d(positive[row]), np.atleast_1d(negative[row])])
         neighbors = neighbors[neighbors != row]
-        values = np.abs(x[row] @ x[neighbors].T)
         if neighbors.size > k:
-            keep = np.argsort(values)[-k:]
-            neighbors, values = neighbors[keep], values[keep]
+            candidate_values = np.abs(x[row] @ x[neighbors].T)
+            neighbors = neighbors[np.argsort(candidate_values)[-k:]]
+        # Preserve the paper implementation's operation order. Recomputing the
+        # selected edge weights matters at float32 precision for Infomap.
+        values = np.abs(x[row] @ x[neighbors].T)
         rows.extend([row] * neighbors.size)
         columns.extend(neighbors.tolist())
         similarities.extend(values.tolist())
-    distances = 1.0 - np.asarray(similarities)
-    positive_distances = distances[distances > 0]
-    sigma = float(np.median(positive_distances)) if positive_distances.size else 1.0
-    values = np.exp(-(distances**2) / (2.0 * sigma**2 + 1e-12))
+    similarities_array = np.asarray(similarities)
+    if weight_mode == "abs_cosine":
+        sigma = np.nan
+        values = similarities_array
+    elif weight_mode == "gaussian_distance":
+        distances = 1.0 - similarities_array
+        positive_distances = distances[distances > 0]
+        sigma = float(np.median(positive_distances)) if positive_distances.size else 1.0
+        values = np.exp(-(distances**2) / (2.0 * sigma**2 + 1e-12))
+    else:  # pragma: no cover - guarded by the public type and CLI choices
+        raise ValueError(f"Unknown graph weight mode: {weight_mode}")
     graph = sparse.coo_matrix((values, (rows, columns)), shape=(n, n)).tocsr()
     graph = graph.maximum(graph.T)
     graph.setdiag(0)
     graph.eliminate_zeros()
-    return graph, {"k": float(k), "n_edges": float(graph.nnz // 2), "sigma": sigma}
+    return graph, {
+        "k": float(k),
+        "n_edges": float(graph.nnz // 2),
+        "sigma": sigma,
+        "weight_mode": weight_mode,
+    }
+
+
+def community_affinity_evidence(
+    graph: sparse.csr_matrix, labels: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return row-normalized affinity to each detected community.
+
+    This is the adaptive evidence definition used for the paper's subject-level
+    predictive analysis. It intentionally differs from similarity to a single
+    community-average template: every neighboring peak contributes evidence to
+    its community.
+    """
+    labels = np.asarray(labels, dtype=np.int32)
+    states = np.unique(labels)
+    evidence = np.zeros((labels.size, states.size), dtype=np.float64)
+    csr = graph.tocsr()
+    for output_state, state in enumerate(states):
+        members = labels == state
+        evidence[:, output_state] = np.asarray(csr[:, members].sum(axis=1)).ravel()
+        evidence[members, output_state] -= csr[members][:, members].diagonal()
+    evidence = np.maximum(evidence, 0.0) + 1e-12
+    evidence /= evidence.sum(axis=1, keepdims=True)
+    relabeled = np.searchsorted(states, labels).astype(np.int32)
+    return evidence.astype(np.float32), relabeled
 
 
 def _community_templates(
@@ -85,9 +126,16 @@ def fit_adaptive_model(
     resolution: float = 1.0,
     markov_time: float = 1.0,
     infomap_trials: int = 10,
+    graph_weight_mode: GraphWeightMode = "gaussian_distance",
+    evidence_mode: AdaptiveEvidenceMode = "template_similarity",
     random_state: int = 42,
 ) -> FittedStateModel:
-    graph, metadata = build_polarity_invariant_knn_graph(maps, knn_fraction=knn_fraction, knn_min=knn_min)
+    graph, metadata = build_polarity_invariant_knn_graph(
+        maps,
+        knn_fraction=knn_fraction,
+        knn_min=knn_min,
+        weight_mode=graph_weight_mode,
+    )
     upper = sparse.triu(graph, k=1).tocoo()
     edges = list(zip(upper.row.tolist(), upper.col.tolist()))
     if algorithm == "leiden":
@@ -128,8 +176,15 @@ def fit_adaptive_model(
         metadata.update({"codelength": float(model.codelength), "markov_time": float(markov_time)})
     else:
         raise ValueError(f"Unknown adaptive algorithm: {algorithm}")
-    templates, labels = _community_templates(maps, graph, labels)
-    evidence = spatial_evidence(maps, templates)
+    templates, relabeled = _community_templates(maps, graph, labels)
+    if evidence_mode == "community_affinity":
+        evidence, labels = community_affinity_evidence(graph, labels)
+    elif evidence_mode == "template_similarity":
+        labels = relabeled
+        evidence = spatial_evidence(maps, templates)
+    else:  # pragma: no cover - guarded by the public type
+        raise ValueError(f"Unknown adaptive evidence mode: {evidence_mode}")
     metadata["n_states"] = int(templates.shape[0])
     metadata["template_source"] = "within_community_affinity_weighted_mean"
+    metadata["evidence_mode"] = evidence_mode
     return FittedStateModel(templates, labels, evidence.astype(np.float32), algorithm, metadata)

@@ -1,0 +1,14 @@
+# Python-package version snapshot for the ds004504 paper run.
+# Exact Linux reproduction also requires the BLAS builds in environment-paper.yml.
+numpy==2.4.6
+scipy==1.17.1
+pandas==2.3.3
+scikit-learn==1.8.0
+mne==1.12.1
+PyYAML==6.0.3
+hmmlearn==0.3.3
+pycrostates==0.6.1
+igraph==1.0.0
+leidenalg==0.12.0
+infomap==2.11.0
+openneuro-py==2026.4.1
